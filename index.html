@@ -21,7 +21,9 @@
         localStorage.count = ++count;
         document.querySelector("#count").textContent = count;
     };
-    navigator.serviceWorker.register("sw.js");
+    if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js");
+    }
 </script>
 </body>
 </html>
