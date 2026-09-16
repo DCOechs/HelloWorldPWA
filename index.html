@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hello PWA</title>
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+<h1>Hello World!</h1>
+
+<button id="button">Boop me</button>
+<span id="count">0</span>
+
+<script>
+    let count = Number(localStorage.count || 0);
+
+    document.querySelector("#count").textContent = count;
+
+    document.querySelector("#button").onclick = () => {
+        localStorage.count = ++count;
+        document.querySelector("#count").textContent = count;
+    };
+    navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
