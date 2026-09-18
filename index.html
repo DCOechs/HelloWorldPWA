@@ -7,22 +7,72 @@
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
-<h1>Hello World!</h1>
+<h1>Plank Timer!</h1>
 
-<button id="button">Boop me</button>
-<span id="count">0</span>
+<button id="start">Start plank</button>
+<button id="stop" disabled>Stop plank</button>
+
+<p>You are planking for: <span id="elapsed">0</span> seconds</p>
+
+<p>Total plank time: <span id="total">0</span> seconds</p>
+<p>Average time of last 10 planks: <span id="average">0</span> seconds</p>
 
 <script>
-    let count = Number(localStorage.count || 0);
+    let startTime;
+    let timer;
 
-    document.querySelector("#count").textContent = count;
+    const sessions = JSON.parse(localStorage.sessions || "[]");
 
-    document.querySelector("#button").onclick = () => {
-        localStorage.count = ++count;
-        document.querySelector("#count").textContent = count;
+    const elapsedDisplay = document.querySelector("#elapsed");
+    const totalDisplay = document.querySelector("#total");
+    const averageDisplay = document.querySelector("#average");
+
+    function updateStatistics() {
+        const total = sessions.reduce((sum, session) => sum + session.elapsed, 0);
+
+        const lastTen = sessions.slice(-10);
+        const average = lastTen.length
+            ? lastTen.reduce((sum, session) => sum + session.elapsed, 0) / lastTen.length
+            : 0;
+
+        totalDisplay.textContent = total;
+        averageDisplay.textContent = Math.round(average);
+    }
+
+    document.querySelector("#start").onclick = () => {
+        startTime = new Date();
+
+        document.querySelector("#start").disabled = true;
+        document.querySelector("#stop").disabled = false;
+
+        timer = setInterval(() => {
+            const elapsed = Math.floor((new Date() - startTime) / 1000);
+            elapsedDisplay.textContent = elapsed;
+        }, 1000);
     };
+
+    document.querySelector("#stop").onclick = () => {
+        clearInterval(timer);
+
+        const elapsed = Math.floor((new Date() - startTime) / 1000);
+
+        sessions.push({
+            start: startTime.toISOString(),
+            elapsed: elapsed
+        });
+
+        localStorage.sessions = JSON.stringify(sessions);
+
+        document.querySelector("#start").disabled = false;
+        document.querySelector("#stop").disabled = true;
+
+        updateStatistics();
+    };
+
+    updateStatistics();
+
     if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js");
+        navigator.serviceWorker.register("./sw.js");
     }
 </script>
 </body>

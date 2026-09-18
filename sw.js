@@ -1,4 +1,4 @@
-const CACHE = "hello-v1";
+const CACHE = "hello-v2";
 const FILES = ["./", "index.html"];
 
 self.addEventListener("install", event => {
