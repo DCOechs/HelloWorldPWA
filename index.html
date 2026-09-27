@@ -3,23 +3,172 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Hello PWA</title>
+    <title>Plank</title>
     <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 24px;
+        }
+
+        h1 {
+            margin: 0 0 24px;
+            text-align: center;
+            font-size: 1.8rem;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+        }
+
+        .stat {
+            flex: 1;
+            text-align: center;
+            padding: 16px 8px;
+            border-radius: 16px;
+            background: #f3f3f3;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.6;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+
+        .stat-unit {
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+
+        .timer {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7rem;
+            font-weight: 600;
+        }
+
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: auto;
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            border: 0;
+            border-radius: 16px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+        }
+        button.discard {
+            background: #d32f2f;
+            color: white;
+        }
+        .history {
+            margin-top: 20px;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            opacity: 0.55;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .history-chart {
+            height: 80px;
+            display: flex;
+            align-items: flex-end;
+            gap: 3px;
+        }
+
+        .history-bar {
+            flex: 1;
+            min-width: 0;
+            background: #222;
+            border-radius: 3px 3px 0 0;
+        }
+    </style>
 </head>
 <body>
-<h1>Plank Timer!</h1>
+<h1>Plank</h1>
 
-<button id="start">Start plank</button>
-<button id="stop" disabled>Stop plank</button>
+<div class="stats">
+    <div class="stat">
+        <div class="stat-label">Total time</div>
+        <div class="stat-value"><span id="total">0</span></div>
+        <div class="stat-unit">seconds</div>
+    </div>
 
-<p>You are planking for: <span id="elapsed">0</span> seconds</p>
+    <div class="stat">
+        <div class="stat-label">Last 10 average</div>
+        <div class="stat-value"><span id="average">0</span></div>
+        <div class="stat-unit">seconds</div>
+    </div>
+</div>
+<div class="history">
+    <div class="history-header">
+        <span>Last 30 days</span>
+        <span>Score to beat: <span id="score">7:00</span></span>
+    </div>
 
-<p>Total plank time: <span id="total">0</span> seconds</p>
-<p>Average time of last 10 planks: <span id="average">0</span> seconds</p>
+    <div id="historyChart" class="history-chart"></div>
+</div>
+<div class="timer">
+    <span id="elapsed">0</span>
+</div>
 
+<div class="buttons">
+    <button id="timerButton">Start plank</button>
+</div>
 <script>
     let startTime;
     let timer;
+    let wakeLock = null;
+
+    async function keepScreenAwake() {
+        if (!("wakeLock" in navigator)) {t
+            return;
+        }
+
+        try {
+            wakeLock = await navigator.wakeLock.request("screen");
+        } catch (error) {
+            console.log("Wake lock not available:", error);
+        }
+    }
+
+    async function allowScreenSleep() {
+        if (wakeLock) {
+            await wakeLock.release();
+            wakeLock = null;
+        }
+    }
 
     const sessions = JSON.parse(localStorage.sessions || "[]");
 
@@ -38,38 +187,183 @@
         totalDisplay.textContent = total;
         averageDisplay.textContent = Math.round(average);
     }
+    const timerButton = document.querySelector("#timerButton");
 
-    document.querySelector("#start").onclick = () => {
-        startTime = new Date();
+    let discardTimeout;
+    let discardCountdown;
+    let lastSession = null;
 
-        document.querySelector("#start").disabled = true;
-        document.querySelector("#stop").disabled = false;
+    timerButton.onclick = () => {
 
-        timer = setInterval(() => {
+        // START
+        if (!startTime && !lastSession) {
+            startTime = new Date();
+            keepScreenAwake();
+            timerButton.textContent = "Stop plank";
+
+            timer = setInterval(() => {
+                const elapsed = Math.floor((new Date() - startTime) / 1000);
+                elapsedDisplay.textContent = formatTime(elapsed);
+            }, 1000);
+
+            return;
+        }
+
+        // STOP
+        if (startTime) {
+            clearInterval(timer);
+            allowScreenSleep();
+
             const elapsed = Math.floor((new Date() - startTime) / 1000);
-            elapsedDisplay.textContent = elapsed;
-        }, 1000);
+
+            lastSession = {
+                start: startTime.toISOString(),
+                elapsed: elapsed
+            };
+
+            sessions.push(lastSession);
+            localStorage.sessions = JSON.stringify(sessions);
+
+            startTime = null;
+
+            updateStatistics();
+            updateHistory();
+
+            let secondsLeft = 5;
+
+            timerButton.textContent = `Discard (${secondsLeft})`;
+            timerButton.classList.add("discard");
+
+            discardCountdown = setInterval(() => {
+                secondsLeft--;
+
+                if (secondsLeft > 0) {
+                    timerButton.textContent = `Discard (${secondsLeft})`;
+                }
+            }, 1000);
+
+            discardTimeout = setTimeout(() => {
+                clearInterval(discardCountdown);
+
+                lastSession = null;
+
+                elapsedDisplay.textContent = 0;
+                timerButton.textContent = "Start plank";
+                timerButton.classList.remove("discard");
+            }, 5000);
+
+            return;
+        }
+
+        // DISCARD
+        if (lastSession) {
+            const confirmed = confirm("Discard this plank session?");
+
+            if (!confirmed) {
+                return;
+            }
+
+            clearTimeout(discardTimeout);
+            clearInterval(discardCountdown);
+
+            sessions.pop();
+            localStorage.sessions = JSON.stringify(sessions);
+
+            lastSession = null;
+
+            elapsedDisplay.textContent = 0;
+            timerButton.textContent = "Start plank";
+            timerButton.classList.remove("discard");
+
+            updateStatistics();
+            updateHistory();
+        }
     };
 
-    document.querySelector("#stop").onclick = () => {
-        clearInterval(timer);
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
 
-        const elapsed = Math.floor((new Date() - startTime) / 1000);
+        if (minutes === 0) {
+            return `${remainingSeconds}`;
+        }
 
-        sessions.push({
-            start: startTime.toISOString(),
-            elapsed: elapsed
+        return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+    }
+
+    function updateHistory() {
+        const days = [];
+
+        // Create the last 30 calendar days.
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date();
+            date.setHours(0, 0, 0, 0);
+            date.setDate(date.getDate() - i);
+
+            days.push({
+                date: date,
+                total: 0
+            });
+        }
+
+        // Add every session to its corresponding day.
+        sessions.forEach(session => {
+            const sessionDate = new Date(session.start);
+
+            const day = days.find(day =>
+                sessionDate.getFullYear() === day.date.getFullYear() &&
+                sessionDate.getMonth() === day.date.getMonth() &&
+                sessionDate.getDate() === day.date.getDate()
+            );
+
+            if (day) {
+                day.total += session.elapsed;
+            }
         });
 
-        localStorage.sessions = JSON.stringify(sessions);
+        // Find the best day ever, including days older than 30 days.
+        const allTimeDays = {};
 
-        document.querySelector("#start").disabled = false;
-        document.querySelector("#stop").disabled = true;
+        sessions.forEach(session => {
+            const date = new Date(session.start);
+            const key =
+                date.getFullYear() + "-" +
+                date.getMonth() + "-" +
+                date.getDate();
 
-        updateStatistics();
-    };
+            allTimeDays[key] = (allTimeDays[key] || 0) + session.elapsed;
+        });
+
+        const bestEver = Math.max(0, ...Object.values(allTimeDays));
+        const score = Math.max(420, bestEver);
+
+        // Display the scale/score as minutes:seconds.
+        const minutes = Math.floor(score / 60);
+        const seconds = score % 60;
+
+        document.querySelector("#score").textContent =
+            `${minutes}:${String(seconds).padStart(2, "0")}`;
+
+        // Draw the bars.
+        const chart = document.querySelector("#historyChart");
+        chart.innerHTML = "";
+
+        days.forEach(day => {
+            const bar = document.createElement("div");
+            bar.className = "history-bar";
+
+            if (day.total > 0) {
+                bar.style.height = `${(day.total / score) * 100}%`;
+            } else {
+                bar.style.height = "0";
+            }
+
+            chart.appendChild(bar);
+        });
+    }
 
     updateStatistics();
+    updateHistory();
 
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js");

@@ -1,4 +1,4 @@
-const CACHE = "hello-v2";
+const CACHE = "plank-v1";
 const FILES = ["./", "index.html"];
 
 self.addEventListener("install", event => {
